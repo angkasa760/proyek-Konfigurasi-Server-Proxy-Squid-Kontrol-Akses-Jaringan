@@ -1,0 +1,3 @@
+This topology illustrates a Squid Proxy Server deployed in a virtual lab environment using CentOS 7. 
+
+The proxy server connects multiple clients (Linux & Windows) through a switch, enabling centralized web traffic control, filtering, and monitoring.
