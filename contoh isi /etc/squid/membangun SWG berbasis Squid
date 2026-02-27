@@ -1,0 +1,129 @@
+Apa yang dimaksud SWG (singkat)
+
+SWG = lapisan yang memfilter/mengamankan traffic web (HTTP/HTTPS) berdasarkan: URL/domain, kategori, file type, malware scan, auth (user), kebijakan waktu, TLS inspection, logging & reporting.
+
+Fitur SWG yang bisa kita tambahkan (on-prem dengan Squid)
+
+Prioritas praktis (implementable dengan open-source / ringan):
+
+HTTPS inspection (SSL/TLS interception / SSL Bump) — untuk inspect konten HTTPS.
+
+URL / domain filtering (dstdomain, regex, kategori via blocklists).
+
+File type & MIME blocking (urlpath_regex).
+
+Malware scanning (ICAP / eCAP + ClamAV / c-icap) — scan file download/response.
+
+User authentication (LDAP/Active Directory) — kebijakan per-user.
+
+Time-based rules (workhours).
+
+Logging & reporting (SARG / AWStats / ELK integration).
+
+Proxy chaining / forward to Cloud SWG (opsional hybrid).
+
+Keterbatasan penting (baca dulu)
+
+SSL Bump memerlukan kamu mengeluarkan CA sendiri dan menginstal CA ke semua client (privacy/legal warning). Beberapa aplikasi (pinning/HSTS) bisa rusak.
+
+Malware sandboxing & CASB lengkap biasanya butuh solusi komersial (Zscaler, Netskope, Cisco Umbrella, etc).
+
+Performa: inspeksi TLS & scanning membutuhkan CPU / RAM ekstra. Untuk production butuh sizing (CPU, RAM, I/O).
+
+
+1) Install dependensi (CentOS 7 contoh)
+sudo yum install squid openssl -y
+# untuk ICAP + clamav (opsional)
+# sudo yum install c-icap clamav clamav-server-systemd -y
+
+2) Buat CA (agar Squid menghasilkan sertifikat per-host)
+sudo mkdir -p /etc/squid/ssl_cert
+cd /etc/squid/ssl_cert
+
+# buat private key + self-signed CA cert (valid long enough)
+sudo openssl genrsa -out myCA.key 4096
+sudo openssl req -new -x509 -days 3650 -key myCA.key -out myCA.crt \
+  -subj "/C=ID/ST=Jakarta/L=Jakarta/O=MyLab/OU=Proxy/CN=MySquidCA"
+
+# gabungkan cert+key untuk squid
+sudo cat myCA.crt myCA.key > myCA.pem
+sudo chown squid:squid myCA.* myCA.pem
+sudo chmod 640 myCA.key myCA.pem
+
+3) Inisialisasi ssl_db untuk ssl_crtd
+sudo /usr/lib64/squid/ssl_crtd -c -s /var/lib/ssl_db
+sudo chown -R squid:squid /var/lib/ssl_db
+
+4) Contoh potongan squid.conf untuk SSL Bump + ICAP
+# HTTP listener (explicit proxy)
+http_port 3128
+
+# HTTPS interception (transparent/explicit)
+# jika explicit: client settingnya tetap manual; untuk intercept, gunakan 'intercept' dan iptables redirect
+http_port 3129 ssl-bump cert=/etc/squid/ssl_cert/myCA.pem key=/etc/squid/ssl_cert/myCA.key generate-host-certificates=on dynamic_cert_mem_cache_size=4MB
+
+# ssl_crtd helper (path mungkin berbeda)
+sslcrtd_program /usr/lib64/squid/ssl_crtd -s /var/lib/ssl_db -M 4MB
+sslcrtd_children 8 startup=1 idle=1
+
+# SSL bump steps (simple policy)
+acl step1 at_step SslBump1
+ssl_bump peek step1
+ssl_bump bump all
+
+# disable verifying upstream certs if necessary (optional)
+# sslproxy_cert_error allow all
+# sslproxy_cert_error deny all
+
+# ICAP (contoh, jika kamu pasang c-icap)
+icap_enable on
+icap_service resp_mod_service respmod_precache icap://127.0.0.1:1344/respmod
+icap_service req_mod_service reqmod_precache icap://127.0.0.1:1344/reqmod
+adaptation_access allow all
+
+# URL blocking example (file-based)
+acl blocked_sites dstdomain "/etc/squid/blocked_sites.txt"
+http_access deny blocked_sites
+
+# filetype block
+acl blocked_files urlpath_regex -i \.exe$ \.zip$ \.rar$ \.scr$ \.msi$
+http_access deny blocked_files
+
+# auth (LDAP example)
+auth_param basic program /usr/lib64/squid/basic_ldap_auth -b "dc=example,dc=com" -D "cn=binduser,dc=example,dc=com" -w bindpass -f "uid=%s"
+auth_param basic children 5
+auth_param basic realm Squid proxy-corp
+auth_param basic credentialsttl 2 hours
+acl auth_users proxy_auth REQUIRED
+http_access allow auth_users
+
+# allow local networks first
+acl localnet src 172.24.0.0/16
+http_access allow localnet
+http_access allow localhost
+
+# deny everything else
+http_access deny all
+
+# logs
+access_log /var/log/squid/access.log
+cache_log /var/log/squid/cache.log
+
+5) Contoh iptables untuk transparent intercept
+# for HTTP (port 80)
+sudo iptables -t nat -A PREROUTING -i ens38 -p tcp --dport 80 -j REDIRECT --to-port 3128
+
+# for HTTPS (intercept to ssl-bump listener)
+sudo iptables -t nat -A PREROUTING -i ens38 -p tcp --dport 443 -j REDIRECT --to-port 3129
+
+6) ICAP + ClamAV (konsep singkat)
+
+Pasang c-icap dan clamav (atau gunakan squidclamav).
+
+Konfigurasikan c-icap modul clamav untuk scanning response. Squid memanggil ICAP untuk setiap response, c-icap memeriksa dan memberi hasil (deny/modify).
+
+7) Logging & Reporting
+
+sudo yum install sarg -y
+sarg
+# hasil di /var/www/html/sarg atau path config
