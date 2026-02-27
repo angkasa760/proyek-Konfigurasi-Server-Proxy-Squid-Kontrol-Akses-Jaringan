@@ -1,0 +1,49 @@
+# --- custom ACL: izinkan jaringan lab internal ---
+# ganti 172.24.0.0/16 sesuai subnetmu kalau berbeda
+acl mynetwork src 172.24.0.0/16
+
+# contoh allow untuk localnet dan localhost (biar aman)
+acl localnet src 10.0.0.0/8
+acl localnet src 172.16.0.0/12
+acl localnet src 192.168.0.0/16
+
+http_access allow mynetwork
+http_access allow localhost
+# (baris http_access deny all harus tetap ada di akhir aturan)
+
+Kalau http_port belum ada, tambahkan:
+http_port 3128
+
+Script otomatis untuk menambahkan ACL & restart
+#!/bin/bash
+set -e
+CONF=/etc/squid/squid.conf
+BACKUP=/etc/squid/squid.conf.bak.$(date +%F_%T)
+
+# Parameter
+MYNET="172.24.0.0/16"
+
+echo "Backup config -> $BACKUP"
+sudo cp "$CONF" "$BACKUP"
+
+# remove old mynetwork lines (if any)
+sudo sed -i '/^acl mynetwork /d' "$CONF"
+sudo sed -i '/^http_access allow mynetwork/d' "$CONF"
+
+# insert acl and http_access before the first 'http_access deny all' occurrence
+sudo awk -v net="$MYNET" '
+  /^http_access deny all/ && !inserted {
+    print "acl mynetwork src " net
+    print "http_access allow mynetwork"
+    inserted=1
+  }
+  { print }
+' "$CONF" | sudo tee "$CONF.tmp" > /dev/null
+
+sudo mv "$CONF.tmp" "$CONF"
+
+echo "Restarting squid..."
+sudo systemctl restart squid
+sudo systemctl status squid --no-pager
+echo "Done. Grep mynetwork:"
+grep -n "mynetwork" "$CONF" || true
