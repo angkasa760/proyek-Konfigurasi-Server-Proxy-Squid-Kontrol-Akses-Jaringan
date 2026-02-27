@@ -1,0 +1,17 @@
+# cek baris ACL di config
+sudo grep -n "mynetwork" /etc/squid/squid.conf
+
+# lihat status service
+sudo systemctl status squid
+
+# lihat log akses realtime
+sudo tail -f /var/log/squid/access.log
+
+# test dengan curl lewat proxy
+curl -x http://172.24.0.1:3128 -I http://example.com
+
+# test text browser (seperti di screenshot)
+elinks --dump www.google.com | head -n 7
+
+# cek env proxy di client (screenshot halaman 4 memperlihatkan var env)
+env | grep -i proxy
