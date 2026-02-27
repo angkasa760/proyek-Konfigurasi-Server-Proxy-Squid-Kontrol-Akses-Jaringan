@@ -1,0 +1,40 @@
+1. LOGGING & MONITORING
+access_log /var/log/squid/access.log
+cache_log /var/log/squid/cache.log
+
+Cara analisis
+# lihat traffic realtime
+tail -f /var/log/squid/access.log
+
+# siapa paling sering akses?
+awk '{print $3}' /var/log/squid/access.log | sort | uniq -c | sort -nr | head
+
+# website paling sering diakses
+awk '{print $7}' /var/log/squid/access.log | sort | uniq -c | sort -nr | head
+
+USER AUTHENTICATION
+sudo yum install httpd-tools -y
+sudo htpasswd -c /etc/squid/passwd user1
+
+auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid/passwd
+acl auth_users proxy_auth REQUIRED
+http_access allow auth_users
+
+TIME-BASED ACCESS:
+acl workhours time M-F 08:00-17:00
+acl youtube dstdomain .youtube.com
+
+http_access deny youtube workhours
+
+
+TRANSPARENT PROXY
+http_port 3128 intercept
+iptables -t nat -A PREROUTING -i ens38 -p tcp --dport 80 -j REDIRECT --to-port 3128
+
+FILE TYPE BLOCKING
+acl blocked_files urlpath_regex -i \.mp4$ \.zip$ \.rar$ \.exe$
+http_access deny blocked_files
+
+REPORT / VISUALIZATION
+sudo yum install sarg -y
+sarg
