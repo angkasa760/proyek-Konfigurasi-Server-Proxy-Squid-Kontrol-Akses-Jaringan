@@ -1,0 +1,73 @@
+# --- custom deny ACL: block a particular IP range ---
+# contoh: blokir 172.24.0.100 - 172.24.0.103 (mask /30)
+acl blocked_range src 172.24.0.100/30
+http_access deny blocked_range
+
+# tetap pastikan localnet dan localhost di-allow sebelum deny semua
+acl localnet src 10.0.0.0/8
+acl localnet src 172.16.0.0/12
+acl localnet src 192.168.0.0/16
+http_access allow localnet
+http_access allow localhost
+
+# ... aturan lain yang perlu ...
+# akhirnya
+http_access deny all
+
+
+Script otomatis untuk menambahkan rule blokir (apply-block.sh)
+Script ini backup config, hapus entri blocked_range lama, sisipkan entri baru tepat sebelum http_access deny all, lalu restart squid.
+
+#!/bin/bash
+set -e
+
+CONF=/etc/squid/squid.conf
+BACKUP=/etc/squid/squid.conf.bak.$(date +%F_%T)
+BLOCK_NET="$1"   # pass CIDR as first arg, contoh: ./apply-block.sh 172.24.0.100/30
+
+if [ -z "$BLOCK_NET" ]; then
+  echo "Usage: $0 <cidr>   e.g. $0 172.24.0.100/30"
+  exit 2
+fi
+
+echo "Backing up $CONF -> $BACKUP"
+sudo cp "$CONF" "$BACKUP"
+
+# remove old blocked_range lines (if any)
+sudo sed -i '/^acl blocked_range /d' "$CONF"
+sudo sed -i '/^http_access deny blocked_range/d' "$CONF"
+
+# insert new block entry before first 'http_access deny all'
+sudo awk -v net="$BLOCK_NET" '
+  /^http_access deny all/ && !inserted {
+    print "acl blocked_range src " net
+    print "http_access deny blocked_range"
+    inserted=1
+  }
+  { print }
+' "$CONF" | sudo tee "$CONF.tmp" > /dev/null
+
+sudo mv "$CONF.tmp" "$CONF"
+
+echo "Restarting squid..."
+sudo systemctl restart squid
+sudo systemctl status squid --no-pager
+echo "Done. Current occurrences of blocked_range in config:"
+grep -n "blocked_range" "$CONF" || true
+
+Jalankan:
+chmod +x apply-block.sh
+sudo ./apply-block.sh 172.24.0.100/30
+
+Verifikasi setelah apply
+# cek config mengandung aturan
+sudo grep -n "blocked_range" /etc/squid/squid.conf
+
+# cek service & log
+sudo systemctl status squid
+sudo tail -n 50 /var/log/squid/access.log
+Dari client (contoh IP di dalam range yang diblok):
+# test lewat proxy -> harus ditolak / muncul error
+curl -x http://172.24.0.1:3128 -I http://example.com
+
+# atau cek web browser: harus muncul ERROR Access Denied (screenshot halaman 2).
