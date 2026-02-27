@@ -1,2 +1,13 @@
 sudo yum install httpd-tools -y
 sudo htpasswd -c /etc/squid/passwd username
+
+
+
+Tambahkan ke squid.conf:
+auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid/passwd
+acl authenticated proxy_auth REQUIRED
+http_access allow authenticated
+
+Tes koneksi
+# test HTTP via proxy
+curl -x http://172.24.0.1:3128 http://example.com -I
