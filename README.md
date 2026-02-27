@@ -186,6 +186,3 @@ sudo chown -R squid:squid /etc/squid
 Project: Squid Proxy Server & Secure Web Gateway
 Focus: Network Security, Access Control, Cybersecurity Lab
 
----
-
-🔥 This project demonstrates real-world enterprise-level proxy security implementation.
