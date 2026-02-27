@@ -1,0 +1,12 @@
+# di CentOS 7
+sudo yum install squid -y
+
+# buat cache dirs (jika perlu)
+sudo squid -z
+
+# aktifkan dan jalankan service
+sudo systemctl enable squid
+sudo systemctl start squid
+
+# cek status
+sudo systemctl status squid
