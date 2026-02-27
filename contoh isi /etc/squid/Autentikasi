@@ -1,0 +1,2 @@
+sudo yum install httpd-tools -y
+sudo htpasswd -c /etc/squid/passwd username
