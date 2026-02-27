@@ -1,0 +1,80 @@
+# ===== Website blocking =====
+# file berisi daftar domain yang diblokir (one-per-line)
+acl blocked_sites dstdomain "/etc/squid/blocked_sites.txt"
+
+# contoh blok berdasarkan path/ekstensi (file types)
+acl badfiles urlpath_regex -i \.exe$ \.mov$ \.dat$ \.iso$ \.avi$ \.vbs$
+
+# contoh blok berdasarkan kata kunci pada domain (regex)
+acl badwords dstdomain_regex "/etc/squid/badwords.txt"
+
+# deny rules
+http_access deny blocked_sites
+http_access deny badfiles
+http_access deny badwords
+
+# allow internal networks (pastikan di atas 'deny all' sesuai kebijakan)
+acl localnet src 172.24.0.0/16
+http_access allow localnet
+http_access allow localhost
+
+# akhir
+http_access deny all
+
+Script untuk menambah / hapus domain di daftar blokir (scripts/block-site.sh)
+#!/bin/bash
+# Usage: sudo ./block-site.sh add example.com
+#        sudo ./block-site.sh del example.com
+CONF="/etc/squid/blocked_sites.txt"
+ACTION="$1"
+DOMAIN="$2"
+
+if [ "$EUID" -ne 0 ]; then
+  echo "Run as root: sudo $0 ..."
+  exit 1
+fi
+
+if [ -z "$ACTION" ] || [ -z "$DOMAIN" ]; then
+  echo "Usage: $0 add|del domain"
+  exit 2
+fi
+
+case "$ACTION" in
+  add)
+    grep -i -q "^${DOMAIN}$" "$CONF" 2>/dev/null || echo "$DOMAIN" >> "$CONF"
+    echo "Added $DOMAIN to $CONF"
+    ;;
+  del)
+    if [ -f "$CONF" ]; then
+      sed -i "/^${DOMAIN}$/Id" "$CONF"
+      echo "Removed $DOMAIN from $CONF"
+    fi
+    ;;
+  *)
+    echo "Unknown action"
+    exit 3
+esac
+
+# reload squid without restart
+squid -k reconfigure || systemctl restart squid
+echo "Squid reloaded."
+
+Buat file /etc/squid/blocked_sites.txt kosong dulu kalau belum ada:
+sudo touch /etc/squid/blocked_sites.txt
+sudo chown squid:squid /etc/squid/blocked_sites.txt
+Cara verifikasi:
+# test pakai elinks (screenshot halaman 2)
+elinks --dump http://www.linuxexpert.in | head
+
+# test curl via proxy
+curl -x http://172.24.0.1:3128 -I http://www.linuxexpert.in
+
+
+Di Squid server:
+# lihat entri deny di log (akan tampil TCP_DENIED atau ERR_ACCESS_DENIED)
+sudo tail -f /var/log/squid/access.log
+
+# cek config mengandung blocked_sites
+grep -n "blocked_sites" /etc/squid/squid.conf
+
+
