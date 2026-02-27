@@ -1,0 +1,2 @@
+sudo firewall-cmd --permanent --add-port=3128/tcp
+sudo firewall-cmd --reload
