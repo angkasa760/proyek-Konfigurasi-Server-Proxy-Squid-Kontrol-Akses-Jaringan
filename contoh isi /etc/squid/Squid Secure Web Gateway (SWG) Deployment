@@ -1,0 +1,308 @@
+1) create-ca.sh
+#!/bin/bash
+# create-ca.sh
+# Usage: sudo ./create-ca.sh [COUNTRY] [STATE] [CITY] [ORG] [OU] [CN] [DAYS]
+# Example: sudo ./create-ca.sh ID "Jakarta" "Jakarta" "MyLab" "Proxy" "MySquidCA" 3650
+set -euo pipefail
+
+# default values
+COUNTRY="${1:-ID}"
+STATE="${2:-Jakarta}"
+CITY="${3:-Jakarta}"
+ORG="${4:-MyLab}"
+OU="${5:-Proxy}"
+CN="${6:-MySquidCA}"
+DAYS="${7:-3650}"
+
+SSL_DIR="/etc/squid/ssl_cert"
+SSL_DB_DIR="/var/lib/ssl_db"
+KEY_FILE="${SSL_DIR}/myCA.key"
+CRT_FILE="${SSL_DIR}/myCA.crt"
+PEM_FILE="${SSL_DIR}/myCA.pem"
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root: sudo $0"
+  exit 2
+fi
+
+echo "[*] Creating SSL directories..."
+mkdir -p "${SSL_DIR}"
+chmod 755 "${SSL_DIR}"
+
+echo "[*] Generating CA private key (4096 bits)..."
+openssl genrsa -out "${KEY_FILE}" 4096
+chmod 640 "${KEY_FILE}"
+
+echo "[*] Generating self-signed CA certificate..."
+openssl req -new -x509 -days "${DAYS}" \
+  -key "${KEY_FILE}" \
+  -out "${CRT_FILE}" \
+  -subj "/C=${COUNTRY}/ST=${STATE}/L=${CITY}/O=${ORG}/OU=${OU}/CN=${CN}"
+
+chmod 644 "${CRT_FILE}"
+
+echo "[*] Combining crt + key -> ${PEM_FILE} (for squid)"
+cat "${CRT_FILE}" "${KEY_FILE}" > "${PEM_FILE}"
+chmod 640 "${PEM_FILE}"
+chown -R squid:squid "${SSL_DIR}" || true
+
+# Find ssl_crtd binary
+SSL_CRTD_BIN=""
+if [ -x "/usr/lib64/squid/ssl_crtd" ]; then
+  SSL_CRTD_BIN="/usr/lib64/squid/ssl_crtd"
+elif [ -x "/usr/lib/squid/ssl_crtd" ]; then
+  SSL_CRTD_BIN="/usr/lib/squid/ssl_crtd"
+fi
+
+if [ -n "${SSL_CRTD_BIN}" ]; then
+  echo "[*] Initializing ssl_db using ${SSL_CRTD_BIN} ..."
+  "${SSL_CRTD_BIN}" -c -s "${SSL_DB_DIR}" || true
+  chown -R squid:squid "${SSL_DB_DIR}" || true
+  echo "[+] ssl_db initialized at ${SSL_DB_DIR}"
+else
+  echo "[!] ssl_crtd binary not found automatically. Install squid package and locate ssl_crtd, then run:"
+  echo "    sudo /usr/lib64/squid/ssl_crtd -c -s ${SSL_DB_DIR}"
+fi
+
+echo
+echo "===================================="
+echo "CA created:"
+echo " - CA cert : ${CRT_FILE}"
+echo " - CA key  : ${KEY_FILE}"
+echo " - CA PEM  : ${PEM_FILE}"
+echo " - ssl_db  : ${SSL_DB_DIR} (may require manual init)"
+echo
+echo "Important next steps:"
+echo "1) Copy ${CRT_FILE} to your client machines and import into Trusted Root CAs."
+echo "2) Ensure /etc/squid/squid.conf references cert/key or pem (example: cert=/etc/squid/ssl_cert/myCA.pem)."
+echo "3) Set proper ownership: sudo chown -R squid:squid ${SSL_DIR} ${SSL_DB_DIR}"
+echo "===================================="
+
+
+2) install-squid-centos7.sh
+#!/bin/bash
+# install-squid-centos7.sh
+# Usage: sudo ./install-squid-centos7.sh
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root: sudo $0"
+  exit 2
+fi
+
+echo "[*] Enabling EPEL (needed for some packages)..."
+yum install -y epel-release || true
+
+echo "[*] Installing squid, openssl, httpd-tools (for htpasswd), and tools..."
+yum install -y squid openssl httpd-tools || { echo "Install failed"; exit 3; }
+
+echo "[*] Creating SSL folder for squid (if not exists)..."
+SSL_DIR="/etc/squid/ssl_cert"
+mkdir -p "${SSL_DIR}"
+chown -R squid:squid "${SSL_DIR}" || true
+chmod 750 "${SSL_DIR}"
+
+echo "[*] Creating ssl_db (if ssl_crtd exists)..."
+SSL_CRTD_BIN=""
+if [ -x "/usr/lib64/squid/ssl_crtd" ]; then
+  SSL_CRTD_BIN="/usr/lib64/squid/ssl_crtd"
+elif [ -x "/usr/lib/squid/ssl_crtd" ]; then
+  SSL_CRTD_BIN="/usr/lib/squid/ssl_crtd"
+fi
+
+if [ -n "${SSL_CRTD_BIN}" ]; then
+  SSL_DB_DIR="/var/lib/ssl_db"
+  if [ ! -d "${SSL_DB_DIR}" ]; then
+    echo "[*] Initializing ssl_db..."
+    "${SSL_CRTD_BIN}" -c -s "${SSL_DB_DIR}"
+    chown -R squid:squid "${SSL_DB_DIR}" || true
+  else
+    echo "[*] ssl_db already exists at ${SSL_DB_DIR}"
+  fi
+else
+  echo "[!] ssl_crtd helper not found. ssl_db initialization skipped."
+fi
+
+echo "[*] Enabling and starting squid service..."
+systemctl enable squid
+systemctl start squid
+sleep 1
+systemctl status squid --no-pager || true
+
+echo "[*] Opening firewall ports (3128, 3129) via firewalld (if present)..."
+if command -v firewall-cmd >/dev/null 2>&1; then
+  firewall-cmd --permanent --add-port=3128/tcp || true
+  firewall-cmd --permanent --add-port=3129/tcp || true
+  firewall-cmd --reload || true
+  echo "[*] Firewall updated (3128/3129)"
+else
+  echo "[!] firewall-cmd not found; please ensure ports 3128/3129 are allowed in your infra"
+fi
+
+echo "[*] SELinux note:"
+if command -v getenforce >/dev/null 2>&1; then
+  SEL=$(getenforce)
+  echo "Current SELinux mode: ${SEL}"
+  echo "If SELinux Enforcing and you face problems, consider configuring SELinux policies or temporarily setenforce 0 for testing."
+fi
+
+echo
+echo "Installation complete. Checklist:"
+echo " - /etc/squid exists"
+echo " - SSL folder: ${SSL_DIR} (place myCA.pem here or run create-ca.sh)"
+echo " - If using SSL Bump, ensure ssl_db exists and squid.conf configured"
+echo " - Use 'sudo squid -k reconfigure' after editing squid.conf"
+
+
+3) deploy-ca-to-windows.ps1
+<#
+deploy-ca-to-windows.ps1
+Usage (Admin PowerShell):
+  .\deploy-ca-to-windows.ps1 -CertPath "\\fileserver\share\myCA.crt"
+
+This script imports the certificate into LocalMachine\Root (Trusted Root CA).
+If you want to deploy to CurrentUser store, change -StoreLocation accordingly.
+#>
+
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$CertPath,
+
+    [switch]$RestartBrowser
+)
+
+function Ensure-Admin {
+    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-Error "This script must be run as Administrator."
+        exit 1
+    }
+}
+
+Ensure-Admin
+
+if (-not (Test-Path $CertPath)) {
+    Write-Error "Certificate file not found: $CertPath"
+    exit 2
+}
+
+# Import using certutil (handles PEM/CRT)
+Write-Output "Importing certificate to LocalMachine\Root..."
+$certutilCmd = "certutil -addstore -f Root `"$CertPath`""
+$proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $certutilCmd" -NoNewWindow -Wait -PassThru
+
+if ($proc.ExitCode -eq 0) {
+    Write-Output "Certificate imported successfully into LocalMachine\Root."
+} else {
+    Write-Error "certutil failed with exit code $($proc.ExitCode)."
+    exit $proc.ExitCode
+}
+
+if ($RestartBrowser) {
+    Write-Output "Attempting to close common browsers (Edge, Chrome, Firefox). Some may not close gracefully."
+    Get-Process -Name msedge,chrome,firefox -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Write-Output "Browsers were signaled to close. Ask users to re-open their browsers to pick up new trust store."
+}
+
+Write-Output "Done. Note: Some applications may need logout/login or reboot to pick up new root CA."
+
+
+
+4) setup-icap.sh
+
+#!/bin/bash
+# setup-icap.sh
+# Usage: sudo ./setup-icap.sh
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root: sudo $0"
+  exit 2
+fi
+
+echo "[*] Enabling EPEL..."
+yum install -y epel-release || true
+
+echo "[*] Attempting to install c-icap and clamav via yum..."
+if yum list available c-icap >/dev/null 2>&1; then
+  yum install -y c-icap clamav clamav-update || true
+else
+  echo "[!] c-icap package not found in repos. Attempting to install clamav only and provide instructions to build c-icap."
+  yum install -y clamav clamav-update || true
+  echo
+  echo "To build c-icap from source (manual steps):"
+  cat <<'EOT'
+1) Install dependencies:
+   yum groupinstall -y "Development Tools"
+   yum install -y libicu-devel libxml2-devel openssl-devel
+
+2) Download & build c-icap:
+   cd /usr/local/src
+   wget https://github.com/avast/c-icap/archive/refs/heads/master.zip -O c-icap.zip
+   unzip c-icap.zip && cd c-icap-master
+   ./bootstrap
+   ./configure
+   make
+   make install
+
+3) Configure /usr/local/etc/c-icap.conf (set ServerPort 1344, ServiceEngineModule etc.)
+4) Enable/start c-icap (installation location may vary)
+EOT
+fi
+
+echo "[*] Configuring clamav (freshclam)..."
+if systemctl list-unit-files | grep -q clamav-freshclam; then
+  systemctl enable --now clamav-freshclam || true
+else
+  echo "[!] clamav-freshclam service not found via systemctl; ensure clamav is installed and configured."
+fi
+
+echo "[*] c-icap configuration example (if c-icap installed)."
+ICAP_CONF="/etc/c-icap/c-icap.conf"
+if [ -f "${ICAP_CONF}" ]; then
+  echo "[*] Backing up ${ICAP_CONF} -> ${ICAP_CONF}.bak"
+  cp "${ICAP_CONF}" "${ICAP_CONF}.bak"
+  echo "[*] Ensuring c-icap listens on 127.0.0.1:1344"
+  sed -i 's/^ServerName.*/ServerName c-icap/' "${ICAP_CONF}" || true
+  sed -i 's/^ServerPort.*/ServerPort 1344/' "${ICAP_CONF}" || true
+  echo "[*] You may need to enable/disable/load modules (clamav) in /etc/c-icap/c-icap.conf or modules conf"
+  echo "[*] Start c-icap service:"
+  if systemctl list-unit-files | grep -q c-icap; then
+    systemctl enable --now c-icap || true
+  else
+    echo "[!] c-icap service not available via systemctl; follow source install instructions or init script"
+  fi
+else
+  echo "[!] ${ICAP_CONF} not found. If you built c-icap from source, configure its c-icap.conf according to docs."
+fi
+
+echo
+echo "ICAP installation script finished."
+echo "Next steps:"
+echo " - Configure c-icap to use clamav module (see c-icap docs)."
+echo " - Configure Squid's icap_service lines to use icap://127.0.0.1:1344/respmod"
+echo " - Test: use curl via proxy to download a test EICAR file or other file and see if c-icap/clamav blocks it."
+
+
+
+Petunjuk penggunaan & checklist singkat
+
+Jalankan urutan:
+
+sudo ./install-squid-centos7.sh
+
+sudo ./create-ca.sh (atau dengan parameter identitas)
+
+Salin myCA.pem ke /etc/squid/ssl_cert/ jika create-ca dijalankan di sistem lain
+
+sudo ./setup-icap.sh (opsional untuk malware scanning)
+
+Edit configs/squid.conf.example sesuai kondisi (IP, LDAP bind DN, path ke myCA.pem).
+
+Restart/reconfigure Squid:
+
+sudo squid -k reconfigure atau sudo systemctl restart squid
+
+Deploy CA ke Windows clients:
+
+Jalankan deploy-ca-to-windows.ps1 sebagai Administrator di tiap client, atau gunakan GPO.
