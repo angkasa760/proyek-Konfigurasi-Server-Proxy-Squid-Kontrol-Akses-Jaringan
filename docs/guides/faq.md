@@ -1,148 +1,50 @@
-# FAQ — Pertanyaan yang Sering Ditanyakan
+# FAQ — Frequently Asked Questions
 
-Kumpulan pertanyaan dan jawaban umum seputar konfigurasi dan penggunaan Squid Proxy di lab ini.
-
----
-
-## Instalasi & Setup
-
-### Q: Apakah Squid bisa diinstall di Ubuntu/Debian?
-Ya, tapi script `install_and_service.sh` dioptimalkan untuk CentOS 7. Di Ubuntu gunakan:
-```bash
-sudo apt-get install squid -y
-sudo systemctl enable --now squid
-```
-
-### Q: Bagaimana cara cek versi Squid yang terinstall?
-```bash
-squid -v | head -1
-```
-
-### Q: Squid gagal start setelah konfigurasi, apa yang harus dilakukan?
-Langkah debug:
-```bash
-# Langkah 1: Validasi sintaks konfigurasi
-sudo squid -k parse
-
-# Langkah 2: Lihat log error detail
-sudo journalctl -u squid -xe --no-pager | tail -50
-
-# Langkah 3: Cek permission
-sudo chown -R squid:squid /var/spool/squid /var/log/squid /etc/squid
-sudo chmod 750 /var/spool/squid
-```
-
-### Q: Bagaimana cara reload konfigurasi tanpa restart service?
-```bash
-sudo squid -k reconfigure
-# atau
-sudo systemctl reload squid
-```
+Kumpulan pertanyaan dan solusi untuk kendala teknis Squid Proxy SWG.
 
 ---
 
-## SSL & HTTPS Inspection
+### Q1: Saya sudah menambah domain ke `blocked_sites.txt` tapi masih bisa dibuka. Kenapa?
+**Solusi:**
+1. Pastikan `squid.conf` Anda memiliki baris:
+   `acl blocked_sites dstdomain "/etc/squid/blocked_sites.txt"`
+   `http_access deny blocked_sites`
+2. Pastikan file tersebut berada di lokasi yang benar (`/etc/squid/blocked_sites.txt`).
+3. Jalankan `sudo squid -k reconfigure` untuk memuat ulang daftar tanpa mematikan service.
 
-### Q: Apa itu SSL Bump dan apa risikonya?
-SSL Bump memungkinkan Squid mendekripsi traffic HTTPS untuk inspeksi konten. **Risikonya:**
-- Melanggar privasi pengguna jika tidak ada kebijakan yang jelas
-- Bisa merusak aplikasi dengan certificate pinning (banking apps, Telegram, dll.)
-- Membutuhkan distribusi CA ke semua client
+### Q2: Browser client memunculkan error "Your connection is not private".
+**Solusi:**
+Ini terjadi karena Anda mengaktifkan **SSL Bump** tapi belum mengimport sertifikat CA ke client.
+1. Download file `myCA.crt` dari server proxy.
+2. Import ke browser client (Settings -> Security -> Manage Certificates -> Trusted Root Certification Authorities).
+3. Jika menggunakan Windows, gunakan script `scripts/deploy_ca_windows.ps1` (Jalankan sebagai Admin).
 
-### Q: Browser menampilkan "Your connection is not private" setelah SSL Bump aktif?
-Artinya CA Squid belum diimport ke browser/OS client. Ikuti panduan:
-- [Client Setup Guide](client_setup.md) — bagian "Install CA Certificate"
+### Q3: Kenapa download file .EXE masih bisa padahal sudah diblokir?
+**Solusi:**
+Pengecekan regex tipe file memerlukan ketelitian. Pastikan baris ini ada:
+`acl blocked_files urlpath_regex -i \.exe$ \.msi$`
+`http_access deny blocked_files`
+Lalu pindahkan baris `http_access deny` tersebut ke bagian **Paling Atas** di `squid.conf` (sebelum `http_access allow localnet`).
 
-### Q: Aplikasi banking/BPJS tidak bisa dibuka setelah SSL Bump aktif?
-Tambahkan domain tersebut ke whitelist:
-```bash
-sudo nano /etc/squid/whitelist.txt
-# Tambahkan domain, contoh: .bca.co.id
-sudo squid -k reconfigure
-```
+### Q4: SARG tidak mau memunculkan laporan. Port 80 tertutup.
+**Solusi:**
+Secara default CentOS 7 menutup port 80. Buka via firewall-cmd:
+`sudo firewall-cmd --permanent --add-service=http`
+`sudo firewall-cmd --reload`
+Lalu pastikan layanan Apache berjalan: `sudo systemctl start httpd`.
 
-### Q: Bagaimana cara generate ulang CA jika sudah expired?
-```bash
-sudo ./scripts/create_ca.sh
-# Kemudian redistribute myCA.crt ke semua client
-```
+### Q5: Squid gagal start setelah saya edit konfigurasi. Bagaimana cara cek errornya?
+**Solusi:**
+Jangan langsung menebak. Gunakan perintah validasi bawaan Squid:
+`sudo squid -k parse`
+Squid akan memberitahu nomor baris dan jenis errornya (misal: "Invalid ACL type").
 
----
-
-## ACL & Access Control
-
-### Q: Bagaimana cara memblokir satu domain spesifik?
-```bash
-# Tambahkan di /etc/squid/blocked_sites.txt
-echo ".tiktok.com" | sudo tee -a /etc/squid/blocked_sites.txt
-sudo squid -k reconfigure
-```
-
-### Q: Bagaimana cara memblokir akses berdasarkan jam tertentu?
-Gunakan template: `configs/squid/time_acl.conf`
-Bisa juga lihat panduan lanjutan: [Advanced SWG Deployment](advanced_swg.md)
-
-### Q: Bagaimana cara membatasi kecepatan download client tertentu?
-Gunakan template Delay Pools: `configs/squid/bandwidth_limit.conf`
-
-### Q: Semua traffic diblokir (403), padahal IP sudah ada di localnet?
-Cek urutan ACL di `squid.conf` — `http_access allow localnet` harus **sebelum** `http_access deny all`:
-```bash
-sudo squid -k parse   # Cek syntax
-sudo tail -f /var/log/squid/access.log   # Monitor log
-```
+### Q6: Bagaimana cara monitor traffic secara live tanpa dashboard?
+**Solusi:**
+Gunakan perintah `tail` pada file access log:
+`sudo tail -f /var/log/squid/access.log | awk '{print $3 " " $4 " " $7}'`
 
 ---
 
-## Monitoring & Log
-
-### Q: Di mana file log Squid berada?
-| Log | Path |
-|---|---|
-| Access Log | `/var/log/squid/access.log` |
-| Cache Log | `/var/log/squid/cache.log` |
-
-### Q: Bagaimana cara membaca access.log?
-Format: `waktu durasi_ms client_ip status/http_code bytes metode url`
-```
-1713369600.123   1200 172.24.0.10 TCP_MISS/200 8372 GET http://example.com/
-```
-
-### Q: Bagaimana cara generate laporan traffic harian?
-Install dan gunakan SARG. Lihat panduan: [SARG Reporting Guide](sarg_reporting.md)
-
-### Q: Log berukuran sangat besar, bagaimana cara mengelolanya?
-Gunakan script rotasi log:
-```bash
-sudo ./scripts/rotate_logs.sh
-```
-Jadwalkan otomatis via cron:
-```bash
-echo "0 0 * * 0 root /path/to/scripts/rotate_logs.sh" | sudo tee -a /etc/crontab
-```
-
----
-
-## Performa & Optimasi
-
-### Q: Berapa ukuran cache optimal untuk lab dengan 10 client?
-```text
-cache_mem 256 MB
-maximum_object_size_in_memory 8 KB
-cache_dir ufs /var/spool/squid 2000 16 256  # 2 GB disk cache
-```
-
-### Q: Squid lambat untuk banyak koneksi HTTPS, apa solusinya?
-Tambah jumlah `sslcrtd_children`:
-```text
-sslcrtd_children 16 startup=4 idle=2
-```
-
----
-
-## Uninstall
-
-### Q: Bagaimana cara menghapus Squid dengan bersih?
-```bash
-sudo ./scripts/uninstall.sh
-```
+**Masih butuh bantuan?**
+Buka **Issue** di GitHub atau konsultasikan dengan dokumentasi resmi di [Squid-Cache Wiki](http://wiki.squid-cache.org/).

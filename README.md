@@ -1,220 +1,171 @@
-﻿# Squid Proxy Server & Secure Web Gateway (SWG)
+# Squid Proxy & Secure Web Gateway (SWG) Enterprise
 
-[![Squid](https://img.shields.io/badge/Squid-4.x-2563eb?style=flat-square&logo=nginx&logoColor=white)](https://www.squid-cache.org/)
-[![Platform](https://img.shields.io/badge/Platform-CentOS_7-ee0000?style=flat-square&logo=redhat&logoColor=white)](https://centos.org/)
-[![Security](https://img.shields.io/badge/Security-Access_Control-16a34a?style=flat-square&logo=shieldsdotio&logoColor=white)](https://github.com/angkasa760)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=flat-square&logo=docker&logoColor=white)](docker/)
-[![Vagrant](https://img.shields.io/badge/Vagrant-Lab_Ready-1563ff?style=flat-square&logo=vagrant&logoColor=white)](Vagrantfile)
+![Squid Proxy Enterprise Banner](docs/assets/banner.png)
+
+[![Squid](https://img.shields.io/badge/Squid-4.x-2563eb?style=for-the-badge&logo=nginx&logoColor=white)](https://www.squid-cache.org/)
+[![Platform](https://img.shields.io/badge/Platform-CentOS_7-ee0000?style=for-the-badge&logo=redhat&logoColor=white)](https://centos.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=for-the-badge&logo=docker&logoColor=white)](docker/)
+[![Vagrant](https://img.shields.io/badge/Vagrant-Lab_Ready-1563ff?style=for-the-badge&logo=vagrant&logoColor=white)](Vagrantfile)
 [![CI](https://github.com/angkasa760/proyek-Konfigurasi-Server-Proxy-Squid-Kontrol-Akses-Jaringan/actions/workflows/lint.yml/badge.svg)](https://github.com/angkasa760/proyek-Konfigurasi-Server-Proxy-Squid-Kontrol-Akses-Jaringan/actions)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-> Implementasi Squid Proxy berbasis CentOS 7 untuk lingkungan lab jaringan virtual. Proyek ini mencakup konfigurasi traffic control, SSL interception, website blocking, autentikasi, ICAP antivirus, bandwidth limiting, time-based ACL, dan monitoring traffic.
-
----
-
-## Fitur Utama
-
-| Fitur | Deskripsi |
-|---|---|
-| **Secure Web Gateway (SWG)** | Kendali penuh atas traffic HTTP/HTTPS |
-| **HTTPS Interception (SSL Bump)** | Inspeksi traffic terenkripsi |
-| **Access Control Lists (ACL)** | Rules berbasis IP, domain, kata kunci |
-| **Bandwidth Limiting (Delay Pools)** | Batasi kecepatan per-client atau per-jaringan |
-| **Time-Based ACL** | Blokir sosmed jam kerja, izinkan jam istirahat |
-| **Website & File Blocking** | Domain blocklist + ekstensi berbahaya |
-| **Autentikasi LDAP** | Integrasi Active Directory / OpenLDAP |
-| **Malware Scanning (ICAP + ClamAV)** | Pemindaian file real-time |
-| **SARG Reporting** | Laporan visual traffic per-user dan per-domain |
-| **Docker & Vagrant** | Lab portabel, satu perintah langsung jalan |
+> **Proyek SWG Enterprise-Grade** untuk laboratorium keamanan siber dan infrastruktur jaringan korporat. Konfigurasi ini mentransformasikan server Linux menjadi gateway keamanan canggih yang mampu melakukan inspeksi traffic, pemblokiran ancaman, optimasi bandwidth, dan audit akses jaringan secara real-time.
 
 ---
 
-## Arsitektur Jaringan
+## 🚀 Fitur Utama & Keunggulan Teknis
 
+| Fitur | Deskripsi Teknis | Manfaat |
+|---|---|---|
+| **Deep Packet Inspection** | Menggunakan fitur **SSL Bump** (Peek & Splice) untuk menjangkau traffic HTTPS. | Deteksi ancaman di traffic terenkripsi tanpa merusak privasi client sepenuhnya. |
+| **Real-time Antivirus** | Integrasi **ICAP** dengan ClamAV Scanning Engine melalui engine c-icap. | Deteksi malware pada file yang sedang diunduh secara otomatis. |
+| **Granular ACL Logic** | Aturan akses berlapis berdasarkan IP, subnet, domain, kata kunci, hingga tipe file. | Kendali penuh terhadap kebijakan akses internet organisasi. |
+| **Bandwidth Management** | Implementasi **Delay Pools** untuk membatasi kecepatan per-client/IP. | Mencegah "monopoli" bandwidth oleh satu pengguna. |
+| **Smart Caching** | Optimasi cache memory dan ufs storage untuk penghematan data. | Mempercepat loading konten statis dan menghemat bandwidth WAN. |
+| **Enterprise Auth** | Dukungan autentikasi NCSA (Basic) dan integrasi LDAP. | Sinkronisasi hak akses dengan database user perusahaan. |
+
+---
+
+## 🏗️ Arsitektur Jaringan (Enterprise SWG Model)
+
+Model deployment gateway tunggal memastikan tidak ada "backdoor" atau bypass traffic yang tidak terdeteksi.
+
+```mermaid
+graph LR
+    SubnetA[Client LAN 172.24.0.0/16] --> Switch[Core Switch]
+    Switch --> Proxy[Squid SWG Server 172.24.0.1]
+    
+    subgraph Squid Interior
+    Proxy --> ICAP[C-ICAP / ClamAV]
+    Proxy --> ACL[Access Control Engine]
+    Proxy --> SSL[SSL Interception Logic]
+    Proxy --> Cache[Object Cache Store]
+    end
+    
+    Proxy --> Firewall[Edge Firewall]
+    Firewall --> Internet((WAN / Internet))
 ```
-[ Client Linux ]  ---+
-[ Client Windows ] --+--- [SWITCH] --- [SQUID PROXY - 172.24.0.1] --- [INTERNET]
-[ Client lainnya ] --+       CentOS 7 | Port 3128 (HTTP) | Port 3129 (HTTPS/SWG)
-```
-
-![Topologi Jaringan](docs/assets/topology.png)
-
-| Parameter | Nilai |
-|---|---|
-| Jaringan Internal | `172.24.0.0/16` |
-| IP Proxy Server | `172.24.0.1` |
-| Port HTTP Proxy | `3128` |
-| Port SSL Bump | `3129` |
 
 ---
 
-## Quick Start
+## 🛠️ Master Deployment Guide: Step-by-Step
 
-### Opsi 1 — Vagrant (Paling Mudah)
+Panduan komprehensif dari instalasi OS hingga fitur lanjutan.
+
+### 1. Persiapan Sistem (CentOS 7)
+Proxy ini dioptimalkan untuk CentOS 7. Pastikan sistem memiliki akses internet untuk unduhan awal.
 ```bash
-# Prasyarat: VirtualBox + Vagrant
-vagrant up
-# Selesai! VM CentOS 7 + Squid otomatis tersetup.
+# Update sistem dan install tools esensial
+sudo yum update -y && sudo yum install -y git wget curl net-tools
 ```
 
-### Opsi 2 — Docker
-```bash
-cd docker
-docker compose up -d
-# Squid berjalan di port 3128 host machine
-```
-
-### Opsi 3 — Manual di CentOS 7
-```bash
-# Langkah 1: Install Squid
-chmod +x scripts/install_and_service.sh
-sudo ./scripts/install_and_service.sh
-
-# Langkah 2: Terapkan konfigurasi
-sudo cp configs/squid/squid.conf /etc/squid/squid.conf
-sudo cp configs/squid/blocked_sites.txt /etc/squid/blocked_sites.txt
-sudo squid -k parse   # Validasi dulu
-sudo systemctl restart squid
-```
-
----
-
-## Struktur Repository
-
-```text
-.
-├── .github/
-│   ├── workflows/
-│   │   └── lint.yml                 # CI: ShellCheck + Squid config validation
-│   ├── ISSUE_TEMPLATE/
-│   │   ├── bug_report.md
-│   │   └── feature_request.md
-│   └── PULL_REQUEST_TEMPLATE.md
-├── configs/
-│   ├── squid/
-│   │   ├── squid.conf               # Konfigurasi utama
-│   │   ├── squid_ssl_bump.conf      # Template SSL Bump lengkap
-│   │   ├── blocked_sites.txt        # Domain yang diblokir
-│   │   ├── whitelist.txt            # Bypass SSL Bump (banking, updates)
-│   │   ├── auth.conf                # Template autentikasi LDAP
-│   │   ├── bandwidth_limit.conf     # Delay Pools / pembatasan bandwidth
-│   │   ├── time_acl.conf            # Kontrol akses berbasis jam
-│   │   └── denial_rules.conf        # Aturan http_access deny
-│   └── firewall/
-│       └── centos7_rules.sh         # Aturan firewall CentOS 7
-├── scripts/
-│   ├── install_and_service.sh       # Install otomatis Squid
-│   ├── create_ca.sh                 # Generate Certificate Authority
-│   ├── setup_icap.sh                # Setup ICAP + ClamAV
-│   ├── deploy_ca_windows.ps1        # Deploy CA ke client Windows
-│   ├── health_check.sh              # Cek kesehatan proxy
-│   ├── backup_config.sh             # Backup konfigurasi
-│   ├── rotate_logs.sh               # Rotasi & kompresi log
-│   └── uninstall.sh                 # Hapus Squid dengan bersih
-├── docker/
-│   ├── Dockerfile                   # Image container Squid
-│   └── docker-compose.yml           # Orkestrasi lab portabel
-├── docs/
-│   ├── guides/
-│   │   ├── client_setup.md          # Konfigurasi client (Linux & Windows)
-│   │   ├── verification.md          # Verifikasi & troubleshooting
-│   │   ├── advanced_swg.md          # SWG lanjutan (SSL Bump, ICAP, Auth)
-│   │   ├── security_hardening.md    # Hardening & best practices
-│   │   ├── sarg_reporting.md        # Laporan traffic dengan SARG
-│   │   ├── monitoring.md            # Grafana & ELK Stack integration
-│   │   └── faq.md                   # Pertanyaan yang sering ditanyakan
-│   ├── manuals/                     # PDF dokumentasi lab
-│   └── assets/
-│       └── topology.png             # Diagram topologi
-├── Vagrantfile                      # Lab otomatis via Vagrant
-├── CHANGELOG.md                     # Riwayat perubahan
-├── LICENSE                          # MIT License
-└── README.md
-```
-
----
-
-## Instalasi Lengkap (Step-by-Step)
-
-### Prasyarat
-- CentOS 7 dengan akses root / sudo
-- RAM minimal 2 GB, Storage 20 GB
-- Dua network interface (WAN + LAN)
-- Koneksi internet untuk mengunduh paket
-
-### Step 1 — Clone Repository
+### 2. Instalasi & Service Core
+Gunakan script otomatis kami untuk instalasi standar yang bersih:
 ```bash
 git clone https://github.com/angkasa760/proyek-Konfigurasi-Server-Proxy-Squid-Kontrol-Akses-Jaringan.git
 cd proyek-Konfigurasi-Server-Proxy-Squid-Kontrol-Akses-Jaringan
-```
-
-### Step 2 — Install Squid
-```bash
-chmod +x scripts/install_and_service.sh
+chmod +x scripts/*.sh
 sudo ./scripts/install_and_service.sh
 ```
 
-### Step 3 — Terapkan Konfigurasi
+### 3. Konfigurasi Access Control (ACL)
+Sesuaikan blocklist domain dan keyword untuk keamanan jaringan:
 ```bash
+# Tambahkan domain yang diblokir ke file ini
+sudo nano configs/squid/blocked_sites.txt
+
+# Sync konfigurasi ke sistem
 sudo cp configs/squid/squid.conf /etc/squid/squid.conf
-sudo cp configs/squid/blocked_sites.txt /etc/squid/blocked_sites.txt
 sudo squid -k parse && sudo systemctl restart squid
 ```
 
-### Step 4 — (Opsional) SSL Interception
+### 4. Implementasi SSL Inspection (HTTPS Bump)
+Langkah kritis untuk menginspeksi traffic HTTPS menggunakan CA Certificate:
 ```bash
-chmod +x scripts/create_ca.sh
+# Jalankan script pembuat CA otomatis
 sudo ./scripts/create_ca.sh
-# Kemudian deploy CA ke client: scripts/deploy_ca_windows.ps1
+
+# SELESAI: Ambil file /etc/squid/ssl_cert/myCA.crt
+# Distribusikan ke client dan import ke browser sebagai 'Trusted Root CA'.
 ```
 
-### Step 5 — (Opsional) Malware Scanning
+### 5. Integrasi Keamanan Anti-Malware (ICAP)
+Aktifkan pemindaian virus real-time:
 ```bash
-chmod +x scripts/setup_icap.sh
 sudo ./scripts/setup_icap.sh
-```
-
-### Step 6 — Verifikasi
-```bash
-sudo ./scripts/health_check.sh
-sudo tail -f /var/log/squid/access.log
-curl -x http://172.24.0.1:3128 -I http://example.com
+# Verifikasi c-icap berjalan dengan: netstat -ptln | grep 1344
 ```
 
 ---
 
-## Panduan Lanjutan
+## 📁 Struktur Repository & Fungsi Folder
 
-| Panduan | Link |
-|---|---|
-| Konfigurasi Client | [client_setup.md](docs/guides/client_setup.md) |
-| Verifikasi & Troubleshooting | [verification.md](docs/guides/verification.md) |
-| SWG Lanjutan (SSL Bump, ICAP) | [advanced_swg.md](docs/guides/advanced_swg.md) |
-| Security Hardening | [security_hardening.md](docs/guides/security_hardening.md) |
-| Laporan Traffic (SARG) | [sarg_reporting.md](docs/guides/sarg_reporting.md) |
-| Monitoring Grafana/ELK | [monitoring.md](docs/guides/monitoring.md) |
-| FAQ | [faq.md](docs/guides/faq.md) |
-
----
-
-## Catatan Keamanan
-
-> **Peringatan:** SSL Bump mendekripsi traffic privat. Pastikan pengguna telah diberitahu dan izin telah diperoleh sebelum diaktifkan.
-
-> **Catatan Hukum:** Aplikasi dengan certificate pinning (banking, Telegram) mungkin tidak berfungsi dengan SSL Bump. Tambahkan ke `configs/squid/whitelist.txt`.
-
----
-
-## Kontribusi
-
-1. Fork repository ini
-2. Buat branch baru: `git checkout -b feature/nama-fitur`
-3. Commit perubahan: `git commit -m 'feat: deskripsi perubahan'`
-4. Push: `git push origin feature/nama-fitur`
-5. Buat Pull Request
+```text
+.
+├── .github/                 # Integrasi CI/CD (Linting) & Template Kontribusi
+├── configs/                 # Repository Konfigurasi
+│   ├── squid/               # Template squid.conf, auth, dan blocklists
+│   └── firewall/            # Script iptables & hardening CentOS 7
+├── scripts/                 # Library Automasi
+│   ├── install_and_service.sh  # Deployment inti
+│   ├── create_ca.sh            # Manajemen SSL/TLS
+│   ├── setup_icap.sh           # Integrasi ClamAV
+│   └── health_check.sh         # Dashboard diagnosa sistem
+├── docs/                    # Dokumentasi Teknis
+│   ├── guides/              # Panduan modul detail (SSL, ICAP, Reporting)
+│   └── assets/              # Diagram Topologi dan Branding
+├── docker/                  # Portabilitas Lab via Containers
+├── Vagrantfile              # Otomasi Lab via VirtualBox
+└── README.md                # Gateway Informasi Proyek
+```
 
 ---
 
-Dikembangkan sebagai proyek lab **Konfigurasi Jaringan & Keamanan Siber** — CentOS 7, Squid 4.x.
+## 🛡️ Security Hardening & Compliance
 
-(c) 2026 [angkasa760](https://github.com/angkasa760) - MIT License
+> [!IMPORTANT]
+> **Privasi dan Hukum:** SSL Decryption bersifat invasif. Selalu gunakan whitelisting (`configs/squid/whitelist.txt`) untuk situs perbankan, kesehatan, dan aplikasi sensitif lainnya guna menjaga kepercayaan pengguna dan kepatuhan regulasi.
+
+**Golden Rules:**
+- Jangan pernah membagikan `.key` CA Anda.
+- Gunakan `scripts/rotate_logs.sh` agar disk log tidak penuh (mencegah DoS).
+- Jalankan `scripts/health_check.sh` secara rutin untuk memantau celah keamanan.
+
+---
+
+## 📊 Monitoring & Pelaporan Traffic
+
+Untuk level manajemen, visualisasi traffic sangat krusial:
+1. **SARG Reporting**: Membuat laporan harian berbasis web.
+2. **Access Log Analysis**: Gunakan `tail -f /var/log/squid/access.log` untuk monitoring live.
+3. **Grafana Integration**: (Lihat `docs/guides/monitoring.md`) untuk dashboard real-time yang modern.
+
+---
+
+## 📚 Koleksi Panduan Lengkap (Dalami Teknis)
+
+Klik untuk panduan terperinci setiap modul yang sudah diperbarui:
+
+- 📑 [**Panduan Konfigurasi Client**](docs/guides/client_setup.md) — Setup Windows, Linux & Browser.
+- 🧪 [**Verifikasi & Troubleshooting**](docs/guides/verification.md) — Mengatasi error standar dan log analysis.
+- ⚡ [**SWG Advanced: SSL & Anti-Malware**](docs/guides/advanced_swg.md) — Penjelasan mendalam SSL Bump & ICAP.
+- 🔐 [**Security Hardening Guide**](docs/guides/security_hardening.md) — Mengamankan proxy dari eksploitasi.
+- 📊 [**Laporan Traffic (SARG)**](docs/guides/sarg_reporting.md) — Panduan instalasi dan penggunaan SARG.
+- ❓ [**FAQ - Solusi Masalah Umum**](docs/guides/faq.md) — Jawaban cepat untuk kendala deployment.
+
+---
+
+## 🤝 Kontribusi & Dukungan
+
+Kami sangat terbuka untuk kontribusi komunitas melalui:
+1. **Security Patch**: Laporkan celah keamanan via GitHub Issues.
+2. **Optimization**: Usulkan performa config yang lebih kencang.
+3. **Documentation**: Perjelas bagian yang mungkin sulit dimengerti.
+
+Silakan baca [Panduan Kontribusi](.github/PULL_REQUEST_TEMPLATE.md) sebelum melakukan Pull Request.
+
+---
+
+Dikembangkan sebagai proyek lab **Konfigurasi Jaringan & Keamanan Siber** dengan standar industri.
+
+© 2026 **angkasa760** | *Enterprise Network Engineering Lab* | **MIT License**
