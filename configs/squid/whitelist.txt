@@ -1,0 +1,54 @@
+# ===================================================================
+# whitelist.txt - Domain yang Dikecualikan dari SSL Interception
+# Lokasi: /etc/squid/whitelist.txt
+# Owned: squid:squid (chmod 644)
+#
+# Format: satu domain per baris, subdomain otomatis ter-cover
+# Tambahkan domain yang TIDAK boleh di-decrypt (privacy / pinning)
+# ===================================================================
+
+# --- Perbankan & Keuangan ---
+.klikbca.com
+.bca.co.id
+.mandiriinternet.com
+.bankmandiri.co.id
+.bni.co.id
+.bri.co.id
+.cimbniaga.co.id
+.bi.go.id
+
+# --- Payment Gateway ---
+.paypal.com
+.stripe.com
+.midtrans.com
+.gopay.co.id
+.ovo.id
+.dana.id
+
+# --- OS & Software Updates (bypass scanning) ---
+.windows.com
+.windowsupdate.com
+.microsoft.com
+.apple.com
+.ubuntu.com
+.centos.org
+.redhat.com
+
+# --- Google & CDN (opsional, bisa dihapus jika ingin inspect) ---
+# .google.com
+# .googleapis.com
+# .gstatic.com
+# .youtube.com
+
+# --- Keamanan / Certificate (jangan diblock) ---
+.ocsp.digicert.com
+.crl.comodoca.com
+.ocsp.comodo.com
+.letsencrypt.org
+
+# ===================================================================
+# CATATAN:
+# - Tambahkan domain yang menyebabkan SSL error pada client
+# - Untuk melihat domain yang perlu di-whitelist, cek:
+#   sudo tail -f /var/log/squid/access.log | grep HIER_NONE
+# ===================================================================

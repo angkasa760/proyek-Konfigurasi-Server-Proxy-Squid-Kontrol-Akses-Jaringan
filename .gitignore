@@ -1,0 +1,60 @@
+# Squid Proxy - .gitignore
+
+# ===========================
+# SSL / Kunci Privat (SENSITIF)
+# ===========================
+*.key
+*.pem
+*.p12
+*.pfx
+ssl_cert/
+/var/lib/ssl_db/
+
+# ===========================
+# Password & Credentials
+# ===========================
+*.passwd
+htpasswd
+.env
+*.secret
+
+# ===========================
+# Log Files
+# ===========================
+*.log
+logs/
+access.log
+cache.log
+
+# ===========================
+# File Sementara OS
+# ===========================
+# Windows
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.nfs*
+
+# ===========================
+# Editor / IDE
+# ===========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# ===========================
+# Build / Cache
+# ===========================
+__pycache__/
+*.pyc
+node_modules/
