@@ -1,0 +1,81 @@
+# ===================================================================
+# docker-compose.yml — Squid Proxy Lab (Docker)
+# Cara penggunaan:
+#   docker compose up -d          — Start semua container
+#   docker compose logs -f squid  — Monitor log
+#   docker compose down           — Stop semua
+# ===================================================================
+
+version: "3.8"
+
+services:
+
+  # ---------------------------------------------------------------
+  # Squid Proxy Server
+  # ---------------------------------------------------------------
+  squid:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: squid-proxy
+    hostname: squid-proxy-server
+    restart: unless-stopped
+
+    ports:
+      - "3128:3128"   # HTTP Proxy
+      - "3129:3129"   # SSL Bump
+
+    volumes:
+      # Mount konfigurasi (bisa edit tanpa rebuild image)
+      - ../configs/squid/squid.conf:/etc/squid/squid.conf:ro
+      - ../configs/squid/blocked_sites.txt:/etc/squid/blocked_sites.txt:ro
+      - ../configs/squid/whitelist.txt:/etc/squid/whitelist.txt:ro
+
+      # Persistent storage untuk cache dan log
+      - squid_cache:/var/spool/squid
+      - squid_logs:/var/log/squid
+
+    environment:
+      - TZ=Asia/Jakarta
+
+    networks:
+      proxy_net:
+        ipv4_address: 172.24.0.1
+
+    healthcheck:
+      test: ["CMD", "squid", "-k", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------
+  # Watchtower — Auto-update container (opsional)
+  # ---------------------------------------------------------------
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: watchtower
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - WATCHTOWER_POLL_INTERVAL=86400   # Check setiap 24 jam
+  #   restart: unless-stopped
+
+# ---------------------------------------------------------------
+# Named Volumes
+# ---------------------------------------------------------------
+volumes:
+  squid_cache:
+    driver: local
+  squid_logs:
+    driver: local
+
+# ---------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------
+networks:
+  proxy_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.24.0.0/16
+          gateway: 172.24.0.254

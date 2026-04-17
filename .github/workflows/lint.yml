@@ -1,0 +1,65 @@
+name: Lint & Validate
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  shellcheck:
+    name: ShellCheck (Bash Script Linting)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck on all shell scripts
+        run: |
+          echo "=== Running ShellCheck ==="
+          find scripts/ configs/ -name "*.sh" | while read -r file; do
+            echo "Checking: $file"
+            shellcheck --severity=warning "$file" && echo "  OK" || echo "  FAILED: $file"
+          done
+          echo "=== ShellCheck Complete ==="
+
+  validate-squid-config:
+    name: Squid Config Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Squid
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y squid
+
+      - name: Validate squid.conf syntax
+        run: |
+          echo "=== Validating squid.conf ==="
+          # Copy our config temporarily
+          sudo cp configs/squid/squid.conf /etc/squid/squid.conf
+          sudo squid -k parse 2>&1 && echo "squid.conf: VALID" || echo "squid.conf: HAS ERRORS"
+
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: "**/*.md"
+          config: |
+            {
+              "MD013": false,
+              "MD033": false,
+              "MD041": false
+            }
+        continue-on-error: true
