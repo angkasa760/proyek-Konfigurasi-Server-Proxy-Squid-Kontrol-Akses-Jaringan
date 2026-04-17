@@ -1,48 +1,55 @@
-﻿# Enterprise Squid Proxy & Secure Web Gateway (SWG) Configuration
+﻿# Squid Proxy Server & Secure Web Gateway (SWG)
 
-![Squid Proxy Banner](https://img.shields.io/badge/Squid-4.x-blue.svg) ![Security](https://img.shields.io/badge/Security-Access%20Control-red.svg) ![Platform](https://img.shields.io/badge/Platform-CentOS%207-orange.svg)
+[![Squid](https://img.shields.io/badge/Squid-4.x-2563eb?style=flat-square&logo=nginx&logoColor=white)](https://www.squid-cache.org/)
+[![Platform](https://img.shields.io/badge/Platform-CentOS_7-ee0000?style=flat-square&logo=redhat&logoColor=white)](https://centos.org/)
+[![Security](https://img.shields.io/badge/Security-Access_Control-16a34a?style=flat-square&logo=shieldsdotio&logoColor=white)](https://github.com/angkasa760)
+[![PowerShell](https://img.shields.io/badge/Scripted-Bash_%26_PowerShell-5391fe?style=flat-square&logo=powershell&logoColor=white)](https://github.com/angkasa760)
 
-A professional-grade implementation of **Squid Proxy** on CentOS 7, designed for cybersecurity labs and corporate network environments. This repository provides highly optimized configurations for traffic control, SSL interception (HTTPS inspection), and advanced access management.
-
-## ðŸš€ Key Features
-
-*   **Secure Web Gateway (SWG)**: Full control over inbound and outbound web traffic.
-*   **HTTPS Interception (SSL Bump)**: Ability to inspect encrypted traffic for advanced threat protection.
-*   **Access Control Lists (ACLs)**: Granular rules based on IP, domains, and keywords.
-*   **Website & Extension Blocking**: Pre-configured lists to block malicious or unproductive domains and file types (`.exe`, `.iso`, etc.).
-*   **Authentication Integration**: Templates for LDAP and basic authentication.
-*   **Network Lab Topology**: Includes a visual guide for lab setup.
+> Implementasi Squid Proxy berbasis CentOS 7 untuk lingkungan lab jaringan virtual. Proyek ini mencakup konfigurasi traffic control, SSL interception (HTTPS inspection), website blocking, autentikasi, dan integrasi antivirus via ICAP.
 
 ---
 
-## ðŸ— Network Architecture
+## Fitur Utama
 
-The deployment follows a centralized gateway model where the Squid Server acts as the intermediary for all client requests.
+- **Secure Web Gateway (SWG)** — Kendali penuh atas traffic HTTP/HTTPS masuk dan keluar
+- **HTTPS Interception (SSL Bump)** — Inspeksi traffic terenkripsi untuk deteksi ancaman lanjutan
+- **Access Control Lists (ACL)** — Aturan granular berbasis IP, domain, dan kata kunci
+- **Website & Extension Blocking** — Daftar blokir domain dan tipe file berbahaya (`.exe`, `.iso`, dll.)
+- **Autentikasi LDAP** — Template integrasi dengan Active Directory / OpenLDAP
+- **Malware Scanning (ICAP + ClamAV)** — Pemindaian file unduhan secara real-time
+- **Topologi Lab Virtual** — Diagram arsitektur jaringan untuk referensi setup
+
+---
+
+## Arsitektur Jaringan
+
+Model penerapan terpusat: Squid Server sebagai gateway tunggal antara semua client dan internet.
 
 ![Network Topology](docs/assets/topology.png)
 
-*   **Internal Network**: `172.24.0.0/16`
-*   **Proxy Port**: `3128` (Explicit HTTP) / `3129` (SSL Bump)
+| Parameter | Nilai |
+|---|---|
+| Internal Network | `172.24.0.0/16` |
+| Proxy Port (HTTP) | `3128` |
+| Proxy Port (SSL Bump) | `3129` |
 
 ---
 
-## ðŸ›  Installation & Deployment
+## Instalasi & Deployment
 
-### 1. Prerequisites
-*   CentOS 7 (Minimal or Server with GUI)
-*   Root or sudo access
-*   Two network interfaces (WAN & LAN recommended)
+### Prasyarat
+- CentOS 7 (Minimal atau Server with GUI)
+- Akses root / sudo
+- Dua network interface (WAN + LAN disarankan)
 
-### 2. Quick Install
-Run the automated installation script to setup Squid and essential dependencies:
+### Langkah 1 — Install Squid
 
 ```bash
 chmod +x scripts/install_and_service.sh
 sudo ./scripts/install_and_service.sh
 ```
 
-### 3. Apply Configuration
-Deploy the enterprise-grade configuration files:
+### Langkah 2 — Terapkan Konfigurasi
 
 ```bash
 sudo cp configs/squid/squid.conf /etc/squid/squid.conf
@@ -50,46 +57,100 @@ sudo cp configs/squid/blocked_sites.txt /etc/squid/blocked_sites.txt
 sudo systemctl restart squid
 ```
 
----
+### Langkah 3 — (Opsional) SSL Interception
 
-## ðŸ“‚ Repository Structure
+Generate Certificate Authority (CA):
 
-```text
-â”œâ”€â”€ configs/
-â”‚   â”œâ”€â”€ squid/               # Core Squid configuration files
-â”‚   â”‚   â”œâ”€â”€ squid.conf       # Main configuration (Enterprise Template)
-â”‚   â”‚   â”œâ”€â”€ blocked_sites.txt # Domain blocklist
-â”‚   â”‚   â””â”€â”€ auth.conf        # Authentication templates
-â”‚   â””â”€â”€ firewall/            # Network security & iptables rules
-â”œâ”€â”€ scripts/                 # Automation and maintenance scripts
-â”œâ”€â”€ docs/
-â”‚   â”œâ”€â”€ architecture/        # Project design and topology
-â”‚   â”œâ”€â”€ guides/              # Step-by-step implementation guides
-â”‚   â”œâ”€â”€ manuals/             # legacy PDF documentations
-â”‚   â””â”€â”€ assets/              # Images and diagrams
-â””â”€â”€ README.md                # Project documentation
+```bash
+chmod +x scripts/create_ca.sh
+sudo ./scripts/create_ca.sh
+```
+
+Deploy CA ke client Windows (jalankan sebagai Administrator):
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\scripts\deploy_ca_windows.ps1 -CertPath "C:\path\to\myCA.crt"
+```
+
+### Langkah 4 — (Opsional) ICAP + ClamAV
+
+```bash
+chmod +x scripts/setup_icap.sh
+sudo ./scripts/setup_icap.sh
 ```
 
 ---
 
-## ðŸ›¡ï¸ Security Best Practices
+## Struktur Repository
 
-> [!WARNING]
-> SSL Interception (SSL Bump) decrypts private traffic. Ensure users are notified and compliance policies are met before enabling this in a production environment.
-
-> [!TIP]
-> Always verify the `squid.conf` syntax before restarting the service: `sudo squid -k parse`
-
-## ðŸ“‹ Documentation Guides
-
-*   [Client Setup Guide](docs/guides/client_setup.md)
-*   [Verification & Troubleshooting](docs/guides/verification.md)
-*   [Advanced SWG Deployment](docs/guides/deployment_swg.md)
+```text
+.
+├── configs/
+│   ├── squid/
+│   │   ├── squid.conf          # Konfigurasi utama Squid (Enterprise Template)
+│   │   ├── blocked_sites.txt   # Daftar domain yang diblokir
+│   │   ├── auth.conf           # Template autentikasi
+│   │   └── denial_rules.conf   # Aturan http_access deny
+│   └── firewall/
+│       └── centos7_rules.sh    # Aturan firewall untuk CentOS 7
+├── scripts/
+│   ├── install_and_service.sh  # Instalasi otomatis Squid
+│   ├── create_ca.sh            # Generate Certificate Authority untuk SSL Bump
+│   ├── setup_icap.sh           # Setup ICAP + ClamAV (Malware Scanning)
+│   └── deploy_ca_windows.ps1  # Deploy CA ke client Windows
+├── docs/
+│   ├── guides/
+│   │   ├── client_setup.md     # Panduan konfigurasi client (Linux & Windows)
+│   │   ├── verification.md     # Panduan verifikasi & troubleshooting
+│   │   └── advanced_swg.md     # Panduan SWG lanjutan (SSL Bump, ICAP, Auth)
+│   ├── manuals/                # Dokumen PDF konfigurasi (referensi lab)
+│   └── assets/
+│       └── topology.png        # Diagram topologi jaringan
+└── README.md
+```
 
 ---
 
-## ðŸŽ“ Author & Lab Focus
-Developed as part of a **Network Configuration & Cybersecurity** laboratory project. Focus areas: Proxy Mechanics, Access Control, and Perimeter Security.
+## Verifikasi Cepat
+
+Setelah instalasi, pastikan proxy berjalan:
+
+```bash
+# Cek status service
+sudo systemctl status squid
+
+# Monitor traffic secara real-time
+sudo tail -f /var/log/squid/access.log
+
+# Test koneksi melewati proxy
+curl -x http://172.24.0.1:3128 -I http://example.com
+```
+
+**Expected output di log:**
+- Traffic diizinkan: `TCP_MISS/200`
+- Traffic diblokir: `TCP_DENIED/403`
 
 ---
-Â© 2026 angkasa760 | Enterprise Network Engineering Lab
+
+## Panduan Lanjutan
+
+- [Konfigurasi Client (Linux & Windows)](docs/guides/client_setup.md)
+- [Verifikasi & Troubleshooting](docs/guides/verification.md)
+- [SWG Lanjutan: SSL Bump, ICAP, Autentikasi](docs/guides/advanced_swg.md)
+
+---
+
+## Catatan Keamanan
+
+> **Peringatan:** SSL Interception (SSL Bump) mendekripsi traffic privat. Pastikan pengguna telah diberitahu dan kebijakan kepatuhan terpenuhi sebelum diaktifkan di lingkungan produksi.
+
+> **Tips:** Selalu validasi sintaks `squid.conf` sebelum restart: `sudo squid -k parse`
+
+---
+
+**Fokus Proyek:** Proxy Mechanics, Access Control, Perimeter Security
+
+Dikembangkan sebagai bagian dari proyek lab **Konfigurasi Jaringan & Keamanan Siber**.
+
+© 2026 angkasa760
