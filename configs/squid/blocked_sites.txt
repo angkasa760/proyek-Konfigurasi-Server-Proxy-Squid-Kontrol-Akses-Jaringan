@@ -1,4 +1,4 @@
-# ===== Website blocking =====
+﻿# ===== Website blocking =====
 # file berisi daftar domain yang diblokir (one-per-line)
 acl blocked_sites dstdomain "/etc/squid/blocked_sites.txt"
 

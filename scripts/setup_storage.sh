@@ -1,2 +1,2 @@
-sudo squid -z
+﻿sudo squid -z
 sudo chown -R squid:squid /var/spool/squid
